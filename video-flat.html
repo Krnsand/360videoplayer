@@ -14,6 +14,7 @@
 
     <div id="flat-video-viewer">
       <button id="play-flat-video" type="button" class="viewer-play">Play</button>
+      <button id="enable-motion-btn" type="button" class="viewer-motion" style="display:none">Enable Motion Controls</button>
       <div id="flat-video-controls" class="viewer-controls">
         <button id="toggle-flat-play" type="button" class="viewer-controls__btn">Pause</button>
         <button id="stop-flat-video" type="button" class="viewer-controls__btn">Stop</button>
@@ -25,7 +26,7 @@
         </a-assets>
 
         <a-videosphere src="#flatVideoTexture" material="repeat: 1 0.5; offset: 0 0.25" rotation="0 -130 0"></a-videosphere>
-        <a-camera id="flat-video-camera" yaw-clamp="min: -170; max: 170" look-controls="reverseMouseDrag: true" wasd-controls-enabled="false"></a-camera>
+        <a-camera id="flat-video-camera" yaw-clamp="min: -170; max: 170" look-controls="reverseMouseDrag: true; magicWindowTrackingEnabled: true" wasd-controls-enabled="false"></a-camera>
       </a-scene>
     </div>
   </div>

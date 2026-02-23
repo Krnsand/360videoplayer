@@ -140,5 +140,66 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  // Show Enable Motion Controls button on iOS if needed
+  var enableMotionBtn = document.getElementById('enable-motion-btn');
+  var cameraElForMotion = document.getElementById('flat-video-camera');
+  var lookControls = cameraElForMotion && cameraElForMotion.components && cameraElForMotion.components['look-controls'];
+
+  var enableAframeMotion = function () {
+    if (!cameraElForMotion) return;
+    cameraElForMotion.setAttribute('look-controls', 'magicWindowTrackingEnabled', true);
+
+    var lc = cameraElForMotion.components && cameraElForMotion.components['look-controls'];
+    if (lc) {
+      lc.data.magicWindowTrackingEnabled = true;
+    }
+  };
+
+  var verifyOrientationEvents = function () {
+    return new Promise(function (resolve) {
+      var gotEvent = false;
+      var handler = function () {
+        gotEvent = true;
+      };
+      window.addEventListener('deviceorientation', handler, { passive: true });
+      window.setTimeout(function () {
+        window.removeEventListener('deviceorientation', handler);
+        resolve(gotEvent);
+      }, 800);
+    });
+  };
+
+  if (enableMotionBtn && isMobile) {
+    enableMotionBtn.style.display = 'block';
+
+    enableMotionBtn.addEventListener('click', function () {
+      // iOS permission flow
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission().then(function (permissionState) {
+          if (permissionState === 'granted') {
+            enableMotionBtn.style.display = 'none';
+            window.location.reload();
+          }
+        }).catch(function () {
+          // ignore
+        });
+        return;
+      }
+
+      // Android / other browsers: no permission API, but events may still be blocked on insecure origins.
+      enableAframeMotion();
+
+      verifyOrientationEvents().then(function (gotEvent) {
+        if (!gotEvent) {
+          window.alert('Gyro/motion seems blocked in this browser/context. On many Android browsers (including Samsung Internet) you may need to open the site over HTTPS (not http://LAN-IP) for device motion to work.');
+        } else {
+          enableMotionBtn.style.display = 'none';
+        }
+      });
+    });
+  } else if (enableMotionBtn) {
+    enableMotionBtn.style.display = 'none';
+  }
+
   setPlayUi();
 });
