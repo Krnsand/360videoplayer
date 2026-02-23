@@ -32,6 +32,16 @@
       </div>
     </div>
 
+    <div class="home-picker">
+      <label class="home-picker__label" for="square-video-choice">Square Video</label>
+      <div class="home-picker__row">
+        <select id="square-video-choice" class="home-picker__select">
+          <option value="paddock_square.mp4" selected>Paddock (Square)</option>
+        </select>
+        <button id="open-square-video" class="home-picker__button" type="button">Open</button>
+      </div>
+    </div>
+
   </div>
 
   <script>
@@ -42,6 +52,15 @@
         videoBtn.addEventListener('click', function () {
           var vid = videoSelect.value;
           window.location.href = 'video.html?vid=' + encodeURIComponent(vid);
+        });
+      }
+
+      var squareVideoSelect = document.getElementById('square-video-choice');
+      var squareVideoBtn = document.getElementById('open-square-video');
+      if (squareVideoSelect && squareVideoBtn) {
+        squareVideoBtn.addEventListener('click', function () {
+          var vid = squareVideoSelect.value;
+          window.location.href = 'video-flat.html?vid=' + encodeURIComponent(vid);
         });
       }
 

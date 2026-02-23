@@ -7,7 +7,13 @@ document.addEventListener('DOMContentLoaded', function () {
     'studio.jpg': true
   };
 
+  var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
   var params = new URLSearchParams(window.location.search);
+  var fovParam = params.get('fov');
+  var desiredFov = fovParam ? Number(fovParam) : (isMobile ? 95 : null);
+  if (!Number.isFinite(desiredFov)) desiredFov = (isMobile ? 95 : null);
+
   var requestedImg = params.get('img');
   var selectedImg = (requestedImg && allowedImages[requestedImg]) ? requestedImg : 'forest.jpg';
 
@@ -16,8 +22,14 @@ document.addEventListener('DOMContentLoaded', function () {
     sky.setAttribute('src', selectedImg);
   }
 
+  if (desiredFov) {
+    var camera = document.querySelector('a-camera');
+    if (camera) {
+      camera.setAttribute('fov', desiredFov);
+    }
+  }
+
   var enableMotionBtn = document.getElementById('enable-motion-btn');
-  var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   
   if (isMobile && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     enableMotionBtn.style.display = 'block';
