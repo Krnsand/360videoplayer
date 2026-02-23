@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>360° Media</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container home-container">
+    <h1>Choose 360° Media</h1>
+
+    <div class="home-picker">
+      <label class="home-picker__label" for="video-choice">360° Video</label>
+      <div class="home-picker__row">
+        <select id="video-choice" class="home-picker__select">
+          <option value="studio.mp4" selected>Studio</option>
+          <option value="paddock.mp4">Paddock</option>
+        </select>
+        <button id="open-video" class="home-picker__button" type="button">Open</button>
+      </div>
+    </div>
+
+    <div class="home-picker">
+      <label class="home-picker__label" for="image-choice">360° Image</label>
+      <div class="home-picker__row">
+        <select id="image-choice" class="home-picker__select">
+          <option value="forest.jpg" selected>Forest</option>
+          <option value="studio.jpg">Studio</option>
+        </select>
+        <button id="open-image" class="home-picker__button" type="button">Open</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    (function () {
+      var videoSelect = document.getElementById('video-choice');
+      var videoBtn = document.getElementById('open-video');
+      if (videoSelect && videoBtn) {
+        videoBtn.addEventListener('click', function () {
+          var vid = videoSelect.value;
+          window.location.href = 'video.html?vid=' + encodeURIComponent(vid);
+        });
+      }
+
+      var select = document.getElementById('image-choice');
+      var btn = document.getElementById('open-image');
+      if (!select || !btn) return;
+
+      btn.addEventListener('click', function () {
+        var img = select.value;
+        window.location.href = 'image.html?img=' + encodeURIComponent(img);
+      });
+    })();
+  </script>
+</body>
+</html>

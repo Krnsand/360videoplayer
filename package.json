@@ -1,0 +1,14 @@
+{
+  "name": "360player",
+  "version": "1.0.0",
+  "description": "A simple 360° video player using JavaScript and Video.js VR plugin.",
+  "main": "main.js",
+  "scripts": {
+    "start": "npx serve ."
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "keywords": ["360", "video", "player", "vr", "javascript"],
+  "author": "",
+  "license": "MIT"
+}

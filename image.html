@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>360° Image Viewer</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+</head>
+<body>
+  <div class="container viewer-container">
+    <a href="index.html" class="back-link">← Back to Home</a>
+    <h1>360° Image Viewer</h1>
+    <button id="enable-motion-btn" style="display:none;margin-bottom:12px;">Enable Motion Controls</button>
+    <div id="image-viewer">
+      <a-scene embedded vr-mode-ui="enabled: false">
+        <a-sky src="forest.jpg" rotation="0 -130 0"></a-sky>
+        <a-camera look-controls="reverseMouseDrag: true"></a-camera>
+      </a-scene>
+    </div>
+  </div>
+  <script src="image-viewer.js"></script>
+</body>
+</html>
