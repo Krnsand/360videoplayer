@@ -21,11 +21,11 @@
       </div>
       <a-scene embedded vr-mode-ui="enabled: false">
         <a-assets>
-          <video id="videoTexture" crossorigin="anonymous" preload="auto" playsinline webkit-playsinline></video>
+          <video id="videoTexture" crossorigin="anonymous" preload="metadata" playsinline webkit-playsinline></video>
         </a-assets>
 
-        <a-videosphere src="#videoTexture" rotation="0 -130 0"></a-videosphere>
-        <a-camera id="video-camera" look-controls="reverseMouseDrag: true" wasd-controls-enabled="false"></a-camera>
+        <a-videosphere id="video-sphere" rotation="0 -130 0"></a-videosphere>
+        <a-camera id="video-camera" pitch-clamp="min: -20; max: 20" look-controls="reverseMouseDrag: true; magicWindowTrackingEnabled: false" wasd-controls-enabled="false"></a-camera>
       </a-scene>
     </div>
   </div>

@@ -84,6 +84,9 @@ body {
   margin-bottom: 20px;
   font-size: 1rem;
   transition: color 0.2s;
+  position: relative;
+  z-index: 3003;
+  pointer-events: auto;
 }
 
 .back-link:hover {
@@ -124,6 +127,7 @@ body {
   height: 500px;
   border-radius: 8px;
   overflow: hidden;
+  position: relative;
 }
 
 /* Video viewer */
@@ -166,12 +170,39 @@ body {
   height: 100%;
 }
 
+#video-viewer a-scene,
+#flat-video-viewer a-scene,
+#image-viewer a-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.viewer-poster {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: #000;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  pointer-events: none;
+}
+
+#video-viewer .a-canvas,
+#flat-video-viewer .a-canvas,
+#image-viewer .a-canvas {
+  z-index: 1 !important;
+  pointer-events: auto;
+}
+
 .viewer-play {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  z-index: 2500;
+  z-index: 3001;
+  pointer-events: auto;
   background: rgba(0,0,0,0.65);
   color: #fff;
   border: 1px solid rgba(255,255,255,0.25);
@@ -187,13 +218,28 @@ body {
   bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 2500;
+  z-index: 3001;
+  pointer-events: auto;
   display: flex;
   gap: 10px;
   background: rgba(0,0,0,0.55);
   border: 1px solid rgba(255,255,255,0.15);
   border-radius: 999px;
   padding: 8px 10px;
+}
+
+@media (max-width: 600px) {
+  .viewer-controls {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3002;
+  }
+
+  .viewer-play {
+    z-index: 3002;
+  }
 }
 
 .viewer-controls__btn {
@@ -238,7 +284,8 @@ body {
     top: 10px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 3000;
+    z-index: 3003;
+    pointer-events: auto;
     background: rgba(0,0,0,0.7);
     padding: 8px 12px;
     border-radius: 6px;

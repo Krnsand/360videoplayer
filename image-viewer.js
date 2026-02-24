@@ -37,7 +37,6 @@ document.addEventListener('DOMContentLoaded', function () {
       DeviceOrientationEvent.requestPermission().then(function(permissionState) {
         if (permissionState === 'granted') {
           enableMotionBtn.style.display = 'none';
-          // A-Frame will automatically use device orientation once permission is granted
           window.location.reload();
         }
       }).catch(console.error);

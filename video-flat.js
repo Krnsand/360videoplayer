@@ -4,40 +4,123 @@ if (window.AFRAME && !AFRAME.components['yaw-clamp']) {
   AFRAME.registerComponent('yaw-clamp', {
     schema: {
       min: { type: 'number', default: -90 },
-      max: { type: 'number', default: 90 }
+      max: { type: 'number', default: 90 },
+      bias: { type: 'number', default: 0 }
     },
     init: function () {
-      this._initialYawDeg = null;
-      this._lastYawDeg = null;
+      this._isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      this._baseYawDeg = null;
+      this._lastRawYawDeg = null;
       this._accumulatedDeltaDeg = 0;
+
+      this._desktopBaseYawDeg = null;
     },
     tick: function () {
+      // Desktop: clamp the camera rotation directly to avoid fighting look-controls yawObject.
+      if (this._isMobile) return;
       var obj = this.el.object3D;
       if (!obj) return;
 
-      var yawRad = obj.rotation.y;
-      var yawDeg = THREE.MathUtils.radToDeg(yawRad);
+      var yawDeg = THREE.MathUtils.radToDeg(obj.rotation.y);
+      if (this._desktopBaseYawDeg === null) {
+        this._desktopBaseYawDeg = yawDeg + this.data.bias;
+      }
 
-      if (this._initialYawDeg === null) {
-        this._initialYawDeg = yawDeg;
-        this._lastYawDeg = yawDeg;
+      var minYaw = this._desktopBaseYawDeg + this.data.min;
+      var maxYaw = this._desktopBaseYawDeg + this.data.max;
+      var clampedYaw = Math.min(maxYaw, Math.max(minYaw, yawDeg));
+      if (clampedYaw !== yawDeg) {
+        obj.rotation.y = THREE.MathUtils.degToRad(clampedYaw);
+      }
+    },
+    tock: function () {
+      // Mobile: clamp the raw gyro/mouse yaw source.
+      if (!this._isMobile) return;
+      var lookControls = this.el.components && this.el.components['look-controls'];
+      if (!lookControls || !lookControls.yawObject) return;
+
+      // Read RAW yaw from look-controls. This reflects gyro/mouse input before we clamp.
+      var rawYawDeg = THREE.MathUtils.radToDeg(lookControls.yawObject.rotation.y);
+
+      if (this._baseYawDeg === null) {
+        // Establish the base yaw (center) once, applying bias immediately.
+        this._baseYawDeg = rawYawDeg + this.data.bias;
+        this._lastRawYawDeg = rawYawDeg;
         this._accumulatedDeltaDeg = 0;
+        lookControls.yawObject.rotation.y = THREE.MathUtils.degToRad(this._baseYawDeg);
         return;
       }
 
-      var stepDeg = yawDeg - this._lastYawDeg;
+      var stepDeg = rawYawDeg - this._lastRawYawDeg;
       if (stepDeg > 180) stepDeg -= 360;
       if (stepDeg < -180) stepDeg += 360;
+      this._lastRawYawDeg = rawYawDeg;
 
-      this._accumulatedDeltaDeg += stepDeg;
-      this._lastYawDeg = yawDeg;
+      // Accumulate and clamp. Discard overshoot immediately to avoid edge jitter/stickiness.
+      var nextAccumulated = this._accumulatedDeltaDeg + stepDeg;
+      this._accumulatedDeltaDeg = Math.min(this.data.max, Math.max(this.data.min, nextAccumulated));
 
-      var clampedDelta = Math.min(this.data.max, Math.max(this.data.min, this._accumulatedDeltaDeg));
-      if (clampedDelta !== this._accumulatedDeltaDeg) {
-        this._accumulatedDeltaDeg = clampedDelta;
-        obj.rotation.y = THREE.MathUtils.degToRad(this._initialYawDeg + clampedDelta);
-        this._lastYawDeg = THREE.MathUtils.radToDeg(obj.rotation.y);
+      // Always apply the clamped yaw every frame (prevents snapping/jumping when hitting edges).
+      lookControls.yawObject.rotation.y = THREE.MathUtils.degToRad(this._baseYawDeg + this._accumulatedDeltaDeg);
+    }
+  });
+}
+
+if (window.AFRAME && !AFRAME.components['pitch-clamp']) {
+  AFRAME.registerComponent('pitch-clamp', {
+    schema: {
+      min: { type: 'number', default: -30 },
+      max: { type: 'number', default: 30 }
+    },
+    init: function () {
+      this._isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      this._desktopBasePitchDeg = null;
+      this._basePitchDeg = null;
+      this._lastRawPitchDeg = null;
+      this._accumulatedDeltaDeg = 0;
+    },
+    tick: function () {
+      if (this._isMobile) return;
+      var obj = this.el.object3D;
+      if (!obj) return;
+
+      var pitchDeg = THREE.MathUtils.radToDeg(obj.rotation.x);
+      if (this._desktopBasePitchDeg === null) {
+        this._desktopBasePitchDeg = pitchDeg;
       }
+
+      var minPitch = this._desktopBasePitchDeg + this.data.min;
+      var maxPitch = this._desktopBasePitchDeg + this.data.max;
+      var clampedPitch = Math.min(maxPitch, Math.max(minPitch, pitchDeg));
+      if (clampedPitch !== pitchDeg) {
+        obj.rotation.x = THREE.MathUtils.degToRad(clampedPitch);
+      }
+    },
+    tock: function () {
+      if (!this._isMobile) return;
+      var lookControls = this.el.components && this.el.components['look-controls'];
+      if (!lookControls || !lookControls.pitchObject) return;
+
+      var rawPitchDeg = THREE.MathUtils.radToDeg(lookControls.pitchObject.rotation.x);
+
+      if (this._basePitchDeg === null) {
+        this._basePitchDeg = rawPitchDeg;
+        this._lastRawPitchDeg = rawPitchDeg;
+        this._accumulatedDeltaDeg = 0;
+        lookControls.pitchObject.rotation.x = THREE.MathUtils.degToRad(this._basePitchDeg);
+        return;
+      }
+
+      var stepDeg = rawPitchDeg - this._lastRawPitchDeg;
+      if (stepDeg > 180) stepDeg -= 360;
+      if (stepDeg < -180) stepDeg += 360;
+      this._lastRawPitchDeg = rawPitchDeg;
+
+      var nextAccumulated = this._accumulatedDeltaDeg + stepDeg;
+      this._accumulatedDeltaDeg = Math.min(this.data.max, Math.max(this.data.min, nextAccumulated));
+
+      lookControls.pitchObject.rotation.x = THREE.MathUtils.degToRad(this._basePitchDeg + this._accumulatedDeltaDeg);
     }
   });
 }
@@ -60,13 +143,189 @@ document.addEventListener('DOMContentLoaded', function () {
 
   var videoEl = document.getElementById('flatVideoTexture');
   if (videoEl) {
-    videoEl.src = selectedVid;
     videoEl.loop = true;
+    videoEl.autoplay = false;
+    videoEl.preload = 'metadata';
+    videoEl.playsInline = true;
+    videoEl.setAttribute('playsinline', '');
+
+    try {
+      videoEl.pause();
+    } catch (e) {
+      // ignore
+    }
+    try {
+      videoEl.currentTime = 0;
+    } catch (e) {
+      // ignore
+    }
+    try {
+      videoEl.load();
+    } catch (e) {
+      // ignore
+    }
   }
+
+  var sourceSet = false;
+  var ensureVideoSourceSet = function () {
+    if (!videoEl || sourceSet) return;
+    sourceSet = true;
+    videoEl.src = selectedVid;
+    try {
+      videoEl.load();
+    } catch (e) {
+      // ignore
+    }
+
+    var sphereEl = document.getElementById('flat-video-sphere');
+    if (sphereEl) {
+      sphereEl.setAttribute('src', '#flatVideoTexture');
+    }
+  };
+
+  var posterEl = document.getElementById('flat-video-poster');
+  var posterImgEl = document.getElementById('flatVideoPosterTexture');
+  var sphereElForPoster = document.getElementById('flat-video-sphere');
+  var hasStartedPlayback = false;
+
+  var posterFallbackByVideo = {
+    'paddock_square.mp4': ''
+  };
+
+  if (posterEl) {
+    posterEl.style.display = 'block';
+    var fallbackPoster = posterFallbackByVideo[selectedVid];
+    if (fallbackPoster) {
+      posterEl.style.backgroundImage = 'url(' + fallbackPoster + ')';
+    }
+  }
+
+  if (sphereElForPoster && posterImgEl) {
+    sphereElForPoster.setAttribute('src', '#flatVideoPosterTexture');
+    // Keep CSS poster visible (neutral black) until the A-Frame poster texture has actually loaded.
+    if (posterEl) {
+      var hideOverlayIfReady = function () {
+        if (posterImgEl.complete && posterImgEl.naturalWidth > 0) {
+          posterEl.style.display = 'none';
+        }
+      };
+
+      posterImgEl.addEventListener('load', hideOverlayIfReady);
+      hideOverlayIfReady();
+    }
+  }
+
+  var renderPosterFrame = function (src) {
+    if ((!posterEl && !posterImgEl) || !src) return;
+    if (posterEl && posterEl.dataset && posterEl.dataset.ready === '1') return;
+
+    var tempVideo = document.createElement('video');
+    tempVideo.crossOrigin = 'anonymous';
+    tempVideo.setAttribute('crossorigin', 'anonymous');
+    tempVideo.muted = true;
+    tempVideo.volume = 0;
+    tempVideo.playsInline = true;
+    tempVideo.setAttribute('playsinline', '');
+    tempVideo.preload = 'metadata';
+    tempVideo.src = src;
+
+    var canvas = document.createElement('canvas');
+    var ctx = canvas.getContext('2d');
+
+    var cleanup = function () {
+      tempVideo.removeAttribute('src');
+      try {
+        tempVideo.load();
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    tempVideo.addEventListener('loadedmetadata', function () {
+      var w = tempVideo.videoWidth || 0;
+      var h = tempVideo.videoHeight || 0;
+      if (!w || !h) return;
+      canvas.width = w;
+      canvas.height = h;
+      try {
+        tempVideo.currentTime = Math.min(0.1, Math.max(0, (tempVideo.duration || 0) * 0.01));
+      } catch (e) {
+        // ignore
+      }
+    });
+
+    tempVideo.addEventListener('loadeddata', function () {
+      if (!canvas.width || !canvas.height) return;
+      try {
+        ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
+        var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        if (posterImgEl) posterImgEl.src = dataUrl;
+      } catch (e) {
+        // ignore
+      }
+    });
+
+    tempVideo.addEventListener('seeked', function () {
+      if (!ctx || !canvas.width || !canvas.height) return;
+      try {
+        ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
+        var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        if (posterImgEl) {
+          posterImgEl.src = dataUrl;
+        }
+        if (posterEl) {
+          posterEl.style.backgroundImage = 'url(' + dataUrl + ')';
+          if (posterEl.dataset) posterEl.dataset.ready = '1';
+        }
+      } catch (e) {
+        // ignore
+      } finally {
+        cleanup();
+      }
+    });
+  };
+
+  renderPosterFrame(selectedVid);
+
+  var userInitiatedPlay = false;
 
   var cameraEl = document.getElementById('flat-video-camera');
   if (cameraEl) {
     cameraEl.setAttribute('fov', desiredFov);
+    if (isMobile) {
+      var gyroEnabled = false;
+      try {
+        gyroEnabled = window.sessionStorage && window.sessionStorage.getItem('flatGyroEnabled') === '1';
+      } catch (e) {
+        // ignore
+      }
+      cameraEl.setAttribute('look-controls', 'magicWindowTrackingEnabled', gyroEnabled);
+    } else {
+      cameraEl.setAttribute('look-controls', 'magicWindowTrackingEnabled', false);
+
+      var disableMagicWindow = function () {
+        var lc = cameraEl.components && cameraEl.components['look-controls'];
+        if (!lc) return;
+
+        if (lc.data) {
+          lc.data.magicWindowTrackingEnabled = false;
+        }
+
+        if (lc.magicWindowControls) {
+          lc.magicWindowControls.enabled = false;
+        }
+      };
+
+      if (cameraEl.components && cameraEl.components['look-controls']) {
+        disableMagicWindow();
+      } else {
+        cameraEl.addEventListener('componentinitialized', function (evt) {
+          if (evt && evt.detail && evt.detail.name === 'look-controls') {
+            disableMagicWindow();
+          }
+        });
+      }
+    }
   }
 
   var playBtn = document.getElementById('play-flat-video');
@@ -77,6 +336,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (playBtn) {
       playBtn.style.display = (videoEl && !videoEl.paused) ? 'none' : 'block';
     }
+    if (posterEl) {
+      posterEl.style.display = (!hasStartedPlayback && videoEl && videoEl.paused) ? 'block' : 'none';
+    }
     if (toggleBtn) {
       toggleBtn.textContent = (videoEl && !videoEl.paused) ? 'Pause' : 'Play';
     }
@@ -84,7 +346,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (playBtn && videoEl) {
     playBtn.addEventListener('click', function () {
+      userInitiatedPlay = true;
+      ensureVideoSourceSet();
       videoEl.play().then(function () {
+        hasStartedPlayback = true;
         setPlayUi();
       }).catch(function () {
         setPlayUi();
@@ -105,7 +370,10 @@ document.addEventListener('DOMContentLoaded', function () {
   if (toggleBtn && videoEl) {
     toggleBtn.addEventListener('click', function () {
       if (videoEl.paused) {
+        userInitiatedPlay = true;
+        ensureVideoSourceSet();
         videoEl.play().then(function () {
+          hasStartedPlayback = true;
           setPlayUi();
         }).catch(function () {
           setPlayUi();
@@ -129,14 +397,32 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  var sceneEl = document.querySelector('a-scene');
-  if (sceneEl && videoEl) {
-    sceneEl.addEventListener('loaded', function () {
-      videoEl.play().then(function () {
-        setPlayUi();
-      }).catch(function () {
-        setPlayUi();
-      });
+  // Guard against mobile autoplay (some browsers may start playback automatically).
+  if (videoEl && isMobile) {
+    var forcePausedState = function () {
+      try {
+        videoEl.pause();
+      } catch (e) {
+        // ignore
+      }
+      try {
+        videoEl.currentTime = 0;
+      } catch (e) {
+        // ignore
+      }
+      setPlayUi();
+    };
+
+    videoEl.addEventListener('play', function () {
+      if (!userInitiatedPlay) forcePausedState();
+    });
+
+    videoEl.addEventListener('playing', function () {
+      if (!userInitiatedPlay) forcePausedState();
+    });
+
+    videoEl.addEventListener('loadeddata', function () {
+      if (!userInitiatedPlay && !videoEl.paused) forcePausedState();
     });
   }
 
@@ -172,13 +458,30 @@ document.addEventListener('DOMContentLoaded', function () {
   if (enableMotionBtn && isMobile) {
     enableMotionBtn.style.display = 'block';
 
+    try {
+      if (window.sessionStorage && window.sessionStorage.getItem('flatGyroEnabled') === '1') {
+        enableMotionBtn.style.display = 'none';
+      }
+    } catch (e) {
+      // ignore
+    }
+
     enableMotionBtn.addEventListener('click', function () {
+      var persistGyroEnabled = function () {
+        try {
+          if (window.sessionStorage) window.sessionStorage.setItem('flatGyroEnabled', '1');
+        } catch (e) {
+          // ignore
+        }
+      };
+
       // iOS permission flow
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission().then(function (permissionState) {
           if (permissionState === 'granted') {
+            enableAframeMotion();
+            persistGyroEnabled();
             enableMotionBtn.style.display = 'none';
-            window.location.reload();
           }
         }).catch(function () {
           // ignore
@@ -188,6 +491,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // Android / other browsers: no permission API, but events may still be blocked on insecure origins.
       enableAframeMotion();
+      persistGyroEnabled();
 
       verifyOrientationEvents().then(function (gotEvent) {
         if (!gotEvent) {

@@ -13,6 +13,7 @@
     <h1>Video Player</h1>
 
     <div id="flat-video-viewer">
+      <div id="flat-video-poster" class="viewer-poster"></div>
       <button id="play-flat-video" type="button" class="viewer-play">Play</button>
       <button id="enable-motion-btn" type="button" class="viewer-motion" style="display:none">Enable Motion Controls</button>
       <div id="flat-video-controls" class="viewer-controls">
@@ -22,11 +23,12 @@
 
       <a-scene embedded vr-mode-ui="enabled: false">
         <a-assets>
-          <video id="flatVideoTexture" crossorigin="anonymous" preload="auto" playsinline webkit-playsinline></video>
+          <video id="flatVideoTexture" crossorigin="anonymous" preload="metadata" playsinline webkit-playsinline></video>
+          <img id="flatVideoPosterTexture" alt="" />
         </a-assets>
 
-        <a-videosphere src="#flatVideoTexture" material="repeat: 1 0.5; offset: 0 0.25" rotation="0 -130 0"></a-videosphere>
-        <a-camera id="flat-video-camera" yaw-clamp="min: -170; max: 170" look-controls="reverseMouseDrag: true; magicWindowTrackingEnabled: true" wasd-controls-enabled="false"></a-camera>
+        <a-videosphere id="flat-video-sphere" material="repeat: 1 0.5; offset: 0 0.25" rotation="0 -20 0"></a-videosphere>
+        <a-camera id="flat-video-camera" yaw-clamp="min: -90; max: 230; bias: 0" pitch-clamp="min: -20; max: 20" look-controls="reverseMouseDrag: true; magicWindowTrackingEnabled: false" wasd-controls-enabled="false"></a-camera>
       </a-scene>
     </div>
   </div>
