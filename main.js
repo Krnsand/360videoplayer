@@ -1,5 +1,5 @@
 // main.js
-// Initialize the A-Frame 360 video viewer
+// Clean 360° video player for A-Frame
 
 if (window.AFRAME && !AFRAME.components['pitch-clamp']) {
   AFRAME.registerComponent('pitch-clamp', {
@@ -7,399 +7,262 @@ if (window.AFRAME && !AFRAME.components['pitch-clamp']) {
       min: { type: 'number', default: -20 },
       max: { type: 'number', default: 20 }
     },
-    init: function () {
-      this._isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      this._desktopBasePitchDeg = null;
-      this._basePitchDeg = null;
-      this._lastRawPitchDeg = null;
-      this._accumulatedDeltaDeg = 0;
-    },
     tick: function () {
-      if (this._isMobile) return;
       var obj = this.el.object3D;
       if (!obj) return;
 
       var pitchDeg = THREE.MathUtils.radToDeg(obj.rotation.x);
-      if (this._desktopBasePitchDeg === null) {
-        this._desktopBasePitchDeg = pitchDeg;
-      }
-
-      var minPitch = this._desktopBasePitchDeg + this.data.min;
-      var maxPitch = this._desktopBasePitchDeg + this.data.max;
-      var clampedPitch = Math.min(maxPitch, Math.max(minPitch, pitchDeg));
-      if (clampedPitch !== pitchDeg) {
-        obj.rotation.x = THREE.MathUtils.degToRad(clampedPitch);
-      }
-    },
-    tock: function () {
-      if (!this._isMobile) return;
-      var lookControls = this.el.components && this.el.components['look-controls'];
-      if (!lookControls || !lookControls.pitchObject) return;
-
-      var rawPitchDeg = THREE.MathUtils.radToDeg(lookControls.pitchObject.rotation.x);
-
-      if (this._basePitchDeg === null) {
-        this._basePitchDeg = rawPitchDeg;
-        this._lastRawPitchDeg = rawPitchDeg;
-        this._accumulatedDeltaDeg = 0;
-        lookControls.pitchObject.rotation.x = THREE.MathUtils.degToRad(this._basePitchDeg);
-        return;
-      }
-
-      var stepDeg = rawPitchDeg - this._lastRawPitchDeg;
-      if (stepDeg > 180) stepDeg -= 360;
-      if (stepDeg < -180) stepDeg += 360;
-      this._lastRawPitchDeg = rawPitchDeg;
-
-      var nextAccumulated = this._accumulatedDeltaDeg + stepDeg;
-      this._accumulatedDeltaDeg = Math.min(this.data.max, Math.max(this.data.min, nextAccumulated));
-
-      lookControls.pitchObject.rotation.x = THREE.MathUtils.degToRad(this._basePitchDeg + this._accumulatedDeltaDeg);
+      var clamped = Math.min(this.data.max, Math.max(this.data.min, pitchDeg));
+      obj.rotation.x = THREE.MathUtils.degToRad(clamped);
     }
   });
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+
+  /* ------------------------------
+     Video selection
+  ------------------------------ */
+
   var allowedVideos = {
     'studio.mp4': true,
-    'paddock.mp4': true
+    'paddock_360.mp4': true
   };
 
   var params = new URLSearchParams(window.location.search);
   var requestedVid = params.get('vid');
-  var selectedVid = (requestedVid && allowedVideos[requestedVid]) ? requestedVid : 'studio.mp4';
+  var selectedVid = (requestedVid && allowedVideos[requestedVid])
+    ? requestedVid
+    : 'studio.mp4';
 
   var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-  var fovParam = params.get('fov');
-  var desiredFov;
-  if (fovParam) {
-    desiredFov = Number(fovParam);
-  } else {
-    if (isMobile) {
-      desiredFov = (selectedVid === 'studio.mp4') ? 120 : 90;
-    } else {
-      desiredFov = 45;
-    }
-  }
-  if (!Number.isFinite(desiredFov)) desiredFov = (isMobile ? 90 : 45);
-  desiredFov = Math.max(30, Math.min(120, desiredFov));
+  /* ------------------------------
+     Elements
+  ------------------------------ */
 
   var videoEl = document.getElementById('videoTexture');
-  if (videoEl) {
-    // Defer assigning src until user interaction to avoid mobile browsers auto-starting.
-    videoEl.loop = true;
-    videoEl.autoplay = false;
-    videoEl.preload = 'metadata';
-    videoEl.playsInline = true;
-    videoEl.setAttribute('playsinline', '');
-
-    // Force a paused initial state (mobile browsers may attempt to autoplay on src assignment).
-    try {
-      videoEl.pause();
-    } catch (e) {
-      // ignore
-    }
-    try {
-      videoEl.currentTime = 0;
-    } catch (e) {
-      // ignore
-    }
-    try {
-      videoEl.load();
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  var posterEl = document.getElementById('video-poster');
-  var posterImgEl = document.getElementById('videoPosterTexture');
-  var sphereElForPoster = document.getElementById('video-sphere');
-  var hasStartedPlayback = false;
-
-  var posterFallbackByVideo = {
-    'studio.mp4': '',
-    'paddock.mp4': ''
-  };
-
-  if (posterEl) {
-    posterEl.style.display = 'block';
-    var fallbackPoster = posterFallbackByVideo[selectedVid];
-    if (fallbackPoster) {
-      posterEl.style.backgroundImage = 'url(' + fallbackPoster + ')';
-    }
-  }
-
-  if (sphereElForPoster && posterImgEl) {
-    sphereElForPoster.setAttribute('src', '#videoPosterTexture');
-    var fallbackPosterForImg = posterFallbackByVideo[selectedVid];
-    if (fallbackPosterForImg) {
-      posterImgEl.src = fallbackPosterForImg;
-      if (posterEl) {
-        // Keep CSS poster visible until the A-Frame poster texture has actually loaded.
-        var hideOverlayIfReady = function () {
-          if (posterImgEl.complete && posterImgEl.naturalWidth > 0) {
-            posterEl.style.display = 'none';
-          }
-        };
-
-        posterImgEl.addEventListener('load', hideOverlayIfReady);
-        hideOverlayIfReady();
-      }
-    }
-  }
-
-  var renderPosterFrame = function (src) {
-    if ((!posterEl && !posterImgEl) || !src) return;
-    if (posterEl && posterEl.dataset && posterEl.dataset.ready === '1') return;
-
-    var tempVideo = document.createElement('video');
-    tempVideo.crossOrigin = 'anonymous';
-    tempVideo.setAttribute('crossorigin', 'anonymous');
-    tempVideo.muted = true;
-    tempVideo.volume = 0;
-    tempVideo.playsInline = true;
-    tempVideo.setAttribute('playsinline', '');
-    tempVideo.preload = 'metadata';
-    tempVideo.src = src;
-
-    var canvas = document.createElement('canvas');
-    var ctx = canvas.getContext('2d');
-
-    var cleanup = function () {
-      tempVideo.removeAttribute('src');
-      try {
-        tempVideo.load();
-      } catch (e) {
-        // ignore
-      }
-    };
-
-    tempVideo.addEventListener('loadedmetadata', function () {
-      var w = tempVideo.videoWidth || 0;
-      var h = tempVideo.videoHeight || 0;
-      if (!w || !h) return;
-      canvas.width = w;
-      canvas.height = h;
-      try {
-        tempVideo.currentTime = Math.min(0.1, Math.max(0, (tempVideo.duration || 0) * 0.01));
-      } catch (e) {
-        // ignore
-      }
-    });
-
-    tempVideo.addEventListener('loadeddata', function () {
-      if (!canvas.width || !canvas.height) return;
-      try {
-        ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
-        var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-        if (posterImgEl) posterImgEl.src = dataUrl;
-      } catch (e) {
-        // ignore
-      }
-    });
-
-    tempVideo.addEventListener('seeked', function () {
-      if (!ctx || !canvas.width || !canvas.height) return;
-      try {
-        ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
-        var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-        if (posterImgEl) {
-          posterImgEl.src = dataUrl;
-        }
-        if (posterEl) {
-          posterEl.style.backgroundImage = 'url(' + dataUrl + ')';
-          if (posterEl.dataset) posterEl.dataset.ready = '1';
-        }
-      } catch (e) {
-        // ignore
-      } finally {
-        cleanup();
-      }
-    });
-  };
-
-  renderPosterFrame(selectedVid);
-
-  var sourceSet = false;
-  var ensureVideoSourceSet = function () {
-    if (!videoEl || sourceSet) return;
-    sourceSet = true;
-    videoEl.src = selectedVid;
-    try {
-      videoEl.load();
-    } catch (e) {
-      // ignore
-    }
-
-    var sphereEl = document.getElementById('video-sphere');
-    if (sphereEl) {
-      sphereEl.setAttribute('src', '#videoTexture');
-    }
-  };
-
-  var userInitiatedPlay = false;
+  var sphereEl = document.getElementById('video-sphere');
+  var cameraEl = document.getElementById('video-camera');
 
   var playBtn = document.getElementById('play-video');
   var toggleBtn = document.getElementById('toggle-play');
   var stopBtn = document.getElementById('stop-video');
-  var setPlayUi = function () {
-    if (!playBtn) return;
-    playBtn.style.display = (videoEl && !videoEl.paused) ? 'none' : 'block';
+  var enableMotionBtn = document.getElementById('enable-motion-btn');
 
-    if (posterEl) {
-      posterEl.style.display = (!hasStartedPlayback && videoEl && videoEl.paused) ? 'block' : 'none';
-    }
+  if (!videoEl || !sphereEl) return;
 
-    if (toggleBtn) {
-      toggleBtn.textContent = (videoEl && !videoEl.paused) ? 'Pause' : 'Play';
-    }
-  };
+  /* ------------------------------
+     Initial video setup
+  ------------------------------ */
 
-  if (playBtn && videoEl) {
-    playBtn.addEventListener('click', function () {
-      userInitiatedPlay = true;
-      ensureVideoSourceSet();
-      videoEl.play().then(function () {
-        hasStartedPlayback = true;
-        setPlayUi();
-      }).catch(function () {
-        setPlayUi();
-      });
+  videoEl.loop = true;
+  videoEl.autoplay = false;
+  videoEl.preload = 'auto';
+  videoEl.playsInline = true;
+  videoEl.setAttribute('playsinline', '');
+
+  videoEl.src = selectedVid;
+
+  sphereEl.setAttribute('src', '#videoTexture');
+  sphereEl.setAttribute('material', 'opacity', 0);
+
+  // Freeze frame render
+  videoEl.addEventListener('loadeddata', function () {
+    try {
+      // Only force a freeze-frame when playback has NOT been user initiated.
+      // Otherwise this handler can race with the first Play tap and cause a "needs two taps" issue.
+      if (!userInitiatedPlay && !hasStartedPlayback) {
+        videoEl.currentTime = 0.01;
+        videoEl.pause();
+        sphereEl.setAttribute('material', 'opacity', 1);
+      }
+    } catch (e) {}
+  });
+
+  /* ------------------------------
+     Fade-in on first play
+  ------------------------------ */
+
+  var hasStartedPlayback = false;
+  var userInitiatedPlay = false;
+
+  function fadeInSphere() {
+    sphereEl.setAttribute('material', 'opacity', 0);
+
+    sphereEl.setAttribute('animation__fade', {
+      property: 'material.opacity',
+      from: 0,
+      to: 1,
+      dur: 500,
+      easing: 'easeOutQuad'
     });
-
-    videoEl.addEventListener('play', setPlayUi);
-    videoEl.addEventListener('pause', setPlayUi);
-    videoEl.addEventListener('ended', setPlayUi);
   }
 
-  if (toggleBtn && videoEl) {
+  /* ------------------------------
+     Pseudo spatial audio
+  ------------------------------ */
+
+  var audioCtx = null;
+  var sourceNode = null;
+  var panner = null;
+  var rafId = 0;
+
+  function getYawRad() {
+    if (!cameraEl) return 0;
+    var lc = cameraEl.components['look-controls'];
+    if (lc && lc.yawObject) return lc.yawObject.rotation.y || 0;
+    return 0;
+  }
+
+  function startSpatialAudio() {
+    if (!panner) return;
+
+    function tick() {
+      if (videoEl.paused) return;
+      var yaw = getYawRad();
+      var pan = Math.max(-0.65, Math.min(0.65, yaw / (Math.PI / 2)));
+      panner.pan.setTargetAtTime(pan, audioCtx.currentTime, 0.05);
+      rafId = requestAnimationFrame(tick);
+    }
+
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function stopSpatialAudio() {
+    if (rafId) cancelAnimationFrame(rafId);
+  }
+
+  function ensureSpatialAudio() {
+    if (audioCtx) return;
+
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+
+    audioCtx = new Ctx();
+    sourceNode = audioCtx.createMediaElementSource(videoEl);
+    panner = audioCtx.createStereoPanner();
+
+    sourceNode.connect(panner);
+    panner.connect(audioCtx.destination);
+  }
+
+  /* ------------------------------
+     UI Logic
+  ------------------------------ */
+
+  function updateUI() {
+    if (!playBtn || !toggleBtn) return;
+    var playing = !videoEl.paused;
+    playBtn.style.display = playing ? 'none' : 'block';
+    toggleBtn.textContent = playing ? 'Pause' : 'Play';
+  }
+
+  if (playBtn) {
+    playBtn.addEventListener('click', function () {
+      userInitiatedPlay = true;
+      ensureSpatialAudio();
+      videoEl.play().then(function () {
+        if (!hasStartedPlayback) {
+          fadeInSphere();
+          hasStartedPlayback = true;
+        }
+        startSpatialAudio();
+        updateUI();
+      });
+    });
+  }
+
+  if (toggleBtn) {
     toggleBtn.addEventListener('click', function () {
       if (videoEl.paused) {
         userInitiatedPlay = true;
-        ensureVideoSourceSet();
         videoEl.play().then(function () {
-          hasStartedPlayback = true;
-          setPlayUi();
-        }).catch(function () {
-          setPlayUi();
+          startSpatialAudio();
+          updateUI();
         });
       } else {
         videoEl.pause();
-        setPlayUi();
+        stopSpatialAudio();
+        updateUI();
       }
     });
   }
 
-  if (stopBtn && videoEl) {
+  if (stopBtn) {
     stopBtn.addEventListener('click', function () {
       videoEl.pause();
-      try {
-        videoEl.currentTime = 0;
-      } catch (e) {
-        // ignore
-      }
-      setPlayUi();
+      stopSpatialAudio();
+      userInitiatedPlay = false;
+      videoEl.currentTime = 0.01;
+      updateUI();
     });
   }
 
-  // Guard against mobile autoplay (some browsers may start playback automatically).
-  if (videoEl && isMobile) {
-    var forcePausedState = function () {
-      try {
-        videoEl.pause();
-      } catch (e) {
-        // ignore
-      }
-      try {
-        videoEl.currentTime = 0;
-      } catch (e) {
-        // ignore
-      }
-      setPlayUi();
-    };
+  videoEl.addEventListener('play', updateUI);
+  videoEl.addEventListener('pause', updateUI);
 
-    // Some browsers fire 'play' before 'playing'. Guard both.
+  /* ------------------------------
+     Mobile autoplay guard
+  ------------------------------ */
+
+  if (isMobile) {
     videoEl.addEventListener('play', function () {
-      if (!userInitiatedPlay) forcePausedState();
-    });
-
-    videoEl.addEventListener('playing', function () {
-      if (!userInitiatedPlay) forcePausedState();
-    });
-
-    // If the browser starts loading/decoding and tries to begin, re-assert paused state.
-    videoEl.addEventListener('loadeddata', function () {
-      if (!userInitiatedPlay && !videoEl.paused) forcePausedState();
-    });
-  }
-
-  var cameraEl = document.getElementById('video-camera');
-  if (cameraEl) {
-    cameraEl.setAttribute('fov', desiredFov);
-
-    // Disable gyro on mobile by default. It can be enabled explicitly via button.
-    if (isMobile) {
-      var gyroEnabled = false;
-      try {
-        gyroEnabled = window.sessionStorage && window.sessionStorage.getItem('gyroEnabled') === '1';
-      } catch (e) {
-        // ignore
+      if (!userInitiatedPlay && !hasStartedPlayback) {
+        videoEl.pause();
       }
-      cameraEl.setAttribute('look-controls', 'magicWindowTrackingEnabled', gyroEnabled);
-    }
-  }
-
-  var sceneEl = document.querySelector('a-scene');
-  if (sceneEl && videoEl) {
-    sceneEl.addEventListener('loaded', function () {
-      setPlayUi();
     });
   }
 
-  // Enable Motion Controls button (Android + iOS)
-  var enableMotionBtn = document.getElementById('enable-motion-btn');
-  if (enableMotionBtn && isMobile) {
+  /* ------------------------------
+     Motion Controls Button
+  ------------------------------ */
+
+  if (enableMotionBtn && isMobile && cameraEl) {
     enableMotionBtn.style.display = 'block';
 
-    // If gyro was enabled previously, keep it enabled and hide the button.
-    try {
-      if (window.sessionStorage && window.sessionStorage.getItem('gyroEnabled') === '1') {
-        enableMotionBtn.style.display = 'none';
-      }
-    } catch (e) {
-      // ignore
-    }
+    var verifyOrientationEvents = function () {
+      return new Promise(function (resolve) {
+        var gotEvent = false;
+        var handler = function () {
+          gotEvent = true;
+        };
+        window.addEventListener('deviceorientation', handler, { passive: true });
+        window.setTimeout(function () {
+          window.removeEventListener('deviceorientation', handler);
+          resolve(gotEvent);
+        }, 800);
+      });
+    };
 
     enableMotionBtn.addEventListener('click', function () {
-      var enableGyro = function () {
-        if (cameraEl) {
-          cameraEl.setAttribute('look-controls', 'magicWindowTrackingEnabled', true);
-        }
-        try {
-          if (window.sessionStorage) window.sessionStorage.setItem('gyroEnabled', '1');
-        } catch (e) {
-          // ignore
-        }
-        enableMotionBtn.style.display = 'none';
-      };
+      if (typeof DeviceOrientationEvent !== 'undefined' &&
+          typeof DeviceOrientationEvent.requestPermission === 'function') {
 
-      // iOS permission flow
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        DeviceOrientationEvent.requestPermission().then(function (permissionState) {
-          if (permissionState === 'granted') {
-            enableGyro();
+        DeviceOrientationEvent.requestPermission()
+          .then(function (state) {
+            if (state === 'granted') {
+              cameraEl.setAttribute('look-controls', 'magicWindowTrackingEnabled', true);
+              verifyOrientationEvents().then(function (gotEvent) {
+                if (!gotEvent) {
+                  window.alert('Gyro/motion seems blocked in this browser/context. On many Android browsers (including Samsung Internet) you may need to open the site over HTTPS (not http://LAN-IP) for device motion to work.');
+                } else {
+                  enableMotionBtn.style.display = 'none';
+                }
+              });
+            }
+          });
+      } else {
+        cameraEl.setAttribute('look-controls', 'magicWindowTrackingEnabled', true);
+        verifyOrientationEvents().then(function (gotEvent) {
+          if (!gotEvent) {
+            window.alert('Gyro/motion seems blocked in this browser/context. On many Android browsers (including Samsung Internet) you may need to open the site over HTTPS (not http://LAN-IP) for device motion to work.');
+          } else {
+            enableMotionBtn.style.display = 'none';
           }
-        }).catch(function () {
-          // ignore
         });
-        return;
       }
-
-      // Android / other browsers
-      enableGyro();
     });
-  } else if (enableMotionBtn) {
-    enableMotionBtn.style.display = 'none';
   }
+
 });

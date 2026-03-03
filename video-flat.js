@@ -5,19 +5,73 @@ if (window.AFRAME && !AFRAME.components['yaw-clamp']) {
     schema: {
       min: { type: 'number', default: -90 },
       max: { type: 'number', default: 90 },
-      bias: { type: 'number', default: 0 }
+      bias: { type: 'number', default: 0 },
+      gyroScale: { type: 'number', default: 0.6 }
     },
     init: function () {
       this._isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
       this._baseYawDeg = null;
+      this._rawBaseYawDeg = null;
       this._lastRawYawDeg = null;
       this._accumulatedDeltaDeg = 0;
 
       this._desktopBaseYawDeg = null;
+
+      this._onCanvasTouch = null;
+    },
+    play: function () {
+      if (!this._isMobile) return;
+      var self = this;
+
+      var attach = function () {
+        var sceneEl = self.el && self.el.sceneEl;
+        var canvas = sceneEl && sceneEl.canvas;
+        if (!canvas) return false;
+
+        if (self._onCanvasTouch) return true;
+
+        self._onCanvasTouch = function () {
+          var lookControls = self.el.components && self.el.components['look-controls'];
+          if (!lookControls || !lookControls.yawObject) return;
+          var rawYawDeg = THREE.MathUtils.radToDeg(lookControls.yawObject.rotation.y);
+
+          // Re-anchor the clamp base to the current yaw.
+          // This prevents a "snap back" when look-controls applies touch smoothing/inertia.
+          self._rawBaseYawDeg = rawYawDeg;
+          self._baseYawDeg = rawYawDeg + self.data.bias;
+          self._accumulatedDeltaDeg = 0;
+        };
+
+        canvas.addEventListener('touchstart', self._onCanvasTouch, { passive: true });
+        canvas.addEventListener('touchend', self._onCanvasTouch, { passive: true });
+        canvas.addEventListener('touchcancel', self._onCanvasTouch, { passive: true });
+        return true;
+      };
+
+      // Canvas may not exist yet on first play; attach when available.
+      if (!attach()) {
+        var sceneEl = this.el && this.el.sceneEl;
+        if (sceneEl) {
+          sceneEl.addEventListener('render-target-loaded', function () {
+            attach();
+          });
+        }
+      }
+    },
+    remove: function () {
+      if (!this._onCanvasTouch) return;
+      var sceneEl = this.el && this.el.sceneEl;
+      var canvas = sceneEl && sceneEl.canvas;
+      if (!canvas) return;
+      canvas.removeEventListener('touchstart', this._onCanvasTouch);
+      canvas.removeEventListener('touchend', this._onCanvasTouch);
+      canvas.removeEventListener('touchcancel', this._onCanvasTouch);
+      this._onCanvasTouch = null;
     },
     tick: function () {
       // Desktop: clamp the camera rotation directly to avoid fighting look-controls yawObject.
+      // Mobile: do not clamp here; let look-controls apply input first, then clamp in tock.
       if (this._isMobile) return;
       var obj = this.el.object3D;
       if (!obj) return;
@@ -45,6 +99,7 @@ if (window.AFRAME && !AFRAME.components['yaw-clamp']) {
 
       if (this._baseYawDeg === null) {
         // Establish the base yaw (center) once, applying bias immediately.
+        this._rawBaseYawDeg = rawYawDeg;
         this._baseYawDeg = rawYawDeg + this.data.bias;
         this._lastRawYawDeg = rawYawDeg;
         this._accumulatedDeltaDeg = 0;
@@ -52,17 +107,25 @@ if (window.AFRAME && !AFRAME.components['yaw-clamp']) {
         return;
       }
 
-      var stepDeg = rawYawDeg - this._lastRawYawDeg;
-      if (stepDeg > 180) stepDeg -= 360;
-      if (stepDeg < -180) stepDeg += 360;
-      this._lastRawYawDeg = rawYawDeg;
+      // Clamp absolute yaw offset from the base yaw each frame.
+      // This avoids "spring back" effects caused by integrating step deltas while look-controls applies
+      // its own smoothing/inertia.
+      var deltaDeg = rawYawDeg - this._rawBaseYawDeg;
+      if (deltaDeg > 180) deltaDeg -= 360;
+      if (deltaDeg < -180) deltaDeg += 360;
 
-      // Accumulate and clamp. Discard overshoot immediately to avoid edge jitter/stickiness.
-      var nextAccumulated = this._accumulatedDeltaDeg + stepDeg;
-      this._accumulatedDeltaDeg = Math.min(this.data.max, Math.max(this.data.min, nextAccumulated));
+      // Reduce gyro sensitivity on mobile by scaling the delta.
+      // (Clamp range stays the same; user just needs more device motion to reach it.)
+      var gyroScale = Number(this.data.gyroScale);
+      if (Number.isFinite(gyroScale)) {
+        gyroScale = Math.max(0.05, Math.min(1, gyroScale));
+        deltaDeg = deltaDeg * gyroScale;
+      }
 
-      // Always apply the clamped yaw every frame (prevents snapping/jumping when hitting edges).
+      this._accumulatedDeltaDeg = Math.min(this.data.max, Math.max(this.data.min, deltaDeg));
       lookControls.yawObject.rotation.y = THREE.MathUtils.degToRad(this._baseYawDeg + this._accumulatedDeltaDeg);
+
+      this._lastRawYawDeg = rawYawDeg;
     }
   });
 }
@@ -71,68 +134,98 @@ if (window.AFRAME && !AFRAME.components['pitch-clamp']) {
   AFRAME.registerComponent('pitch-clamp', {
     schema: {
       min: { type: 'number', default: -30 },
-      max: { type: 'number', default: 30 }
+      max: { type: 'number', default: 30 },
+      gyroScale: { type: 'number', default: 0.35 }
     },
     init: function () {
       this._isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       this._desktopBasePitchDeg = null;
       this._basePitchDeg = null;
+      this._rawBasePitchDeg = null;
       this._lastRawPitchDeg = null;
       this._accumulatedDeltaDeg = 0;
+
+      this._onCanvasTouch = null;
+      this._isTouching = false;
+    },
+    play: function () {
+      if (!this._isMobile) return;
+      var self = this;
+
+      var attach = function () {
+        var sceneEl = self.el && self.el.sceneEl;
+        var canvas = sceneEl && sceneEl.canvas;
+        if (!canvas) return false;
+
+        if (self._onCanvasTouch) return true;
+
+        self._onCanvasTouch = function (evt) {
+          if (evt && evt.type === 'touchstart') self._isTouching = true;
+          if (evt && (evt.type === 'touchend' || evt.type === 'touchcancel')) self._isTouching = false;
+
+          var lookControls = self.el.components && self.el.components['look-controls'];
+          if (!lookControls) return;
+          var obj = self.el && self.el.object3D;
+          if (!obj) return;
+          var euler = new THREE.Euler();
+          euler.setFromQuaternion(obj.quaternion, 'YXZ');
+          var rawPitchDeg = THREE.MathUtils.radToDeg(euler.x);
+
+          // Re-anchor the clamp base to the current pitch to avoid post-drag smoothing/inertia.
+          self._rawBasePitchDeg = rawPitchDeg;
+          self._basePitchDeg = rawPitchDeg;
+          self._accumulatedDeltaDeg = 0;
+        };
+
+        canvas.addEventListener('touchstart', self._onCanvasTouch, { passive: true });
+        canvas.addEventListener('touchend', self._onCanvasTouch, { passive: true });
+        canvas.addEventListener('touchcancel', self._onCanvasTouch, { passive: true });
+        return true;
+      };
+
+      if (!attach()) {
+        var sceneEl = this.el && this.el.sceneEl;
+        if (sceneEl) {
+          sceneEl.addEventListener('render-target-loaded', function () {
+            attach();
+          });
+        }
+      }
+    },
+    remove: function () {
+      if (!this._onCanvasTouch) return;
+      var sceneEl = this.el && this.el.sceneEl;
+      var canvas = sceneEl && sceneEl.canvas;
+      if (!canvas) return;
+      canvas.removeEventListener('touchstart', this._onCanvasTouch);
+      canvas.removeEventListener('touchend', this._onCanvasTouch);
+      canvas.removeEventListener('touchcancel', this._onCanvasTouch);
+      this._onCanvasTouch = null;
     },
     tick: function () {
-      if (this._isMobile) return;
       var obj = this.el.object3D;
       if (!obj) return;
 
       var pitchDeg = THREE.MathUtils.radToDeg(obj.rotation.x);
-      if (this._desktopBasePitchDeg === null) {
-        this._desktopBasePitchDeg = pitchDeg;
-      }
-
-      var minPitch = this._desktopBasePitchDeg + this.data.min;
-      var maxPitch = this._desktopBasePitchDeg + this.data.max;
-      var clampedPitch = Math.min(maxPitch, Math.max(minPitch, pitchDeg));
-      if (clampedPitch !== pitchDeg) {
-        obj.rotation.x = THREE.MathUtils.degToRad(clampedPitch);
-      }
+      var clampedPitch = Math.min(this.data.max, Math.max(this.data.min, pitchDeg));
+      obj.rotation.x = THREE.MathUtils.degToRad(clampedPitch);
+      obj.rotation.z = 0;
     },
     tock: function () {
-      if (!this._isMobile) return;
-      var lookControls = this.el.components && this.el.components['look-controls'];
-      if (!lookControls || !lookControls.pitchObject) return;
-
-      var rawPitchDeg = THREE.MathUtils.radToDeg(lookControls.pitchObject.rotation.x);
-
-      if (this._basePitchDeg === null) {
-        this._basePitchDeg = rawPitchDeg;
-        this._lastRawPitchDeg = rawPitchDeg;
-        this._accumulatedDeltaDeg = 0;
-        lookControls.pitchObject.rotation.x = THREE.MathUtils.degToRad(this._basePitchDeg);
-        return;
-      }
-
-      var stepDeg = rawPitchDeg - this._lastRawPitchDeg;
-      if (stepDeg > 180) stepDeg -= 360;
-      if (stepDeg < -180) stepDeg += 360;
-      this._lastRawPitchDeg = rawPitchDeg;
-
-      var nextAccumulated = this._accumulatedDeltaDeg + stepDeg;
-      this._accumulatedDeltaDeg = Math.min(this.data.max, Math.max(this.data.min, nextAccumulated));
-
-      lookControls.pitchObject.rotation.x = THREE.MathUtils.degToRad(this._basePitchDeg + this._accumulatedDeltaDeg);
+      // No-op: pitch is clamped directly in tick() to match the 360 player behavior.
+      return;
     }
   });
 }
 
 document.addEventListener('DOMContentLoaded', function () {
   var allowedVideos = {
-    'paddock_square.mp4': true
+    'paddock_180.mp4': true
   };
 
   var params = new URLSearchParams(window.location.search);
   var requestedVid = params.get('vid');
-  var selectedVid = (requestedVid && allowedVideos[requestedVid]) ? requestedVid : 'paddock_square.mp4';
+  var selectedVid = (requestedVid && allowedVideos[requestedVid]) ? requestedVid : 'paddock_180.mp4';
 
   var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
@@ -166,7 +259,48 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  var sphereEl = document.getElementById('flat-video-sphere');
+
+  // Set src immediately so we can render a reliable first-frame "freeze" preview.
+  // Mobile autoplay is still blocked by our userInitiatedPlay guards below.
   var sourceSet = false;
+  if (videoEl) {
+    sourceSet = true;
+    videoEl.src = selectedVid;
+    try {
+      videoEl.load();
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  if (sphereEl) {
+    sphereEl.setAttribute('src', '#flatVideoTexture');
+    sphereEl.setAttribute('material', 'opacity', 0);
+  }
+
+  // Freeze frame render (show first frame without letting playback run).
+  if (videoEl && sphereEl) {
+    videoEl.addEventListener('loadeddata', function () {
+      try {
+        videoEl.currentTime = 0.01;
+        videoEl.pause();
+      } catch (e) {
+        // ignore
+      }
+
+      try {
+        sphereEl.setAttribute('material', 'opacity', 1);
+      } catch (e) {
+        // ignore
+      }
+
+      if (posterEl) {
+        posterEl.style.display = 'none';
+      }
+    });
+  }
+
   var ensureVideoSourceSet = function () {
     if (!videoEl || sourceSet) return;
     sourceSet = true;
@@ -177,7 +311,6 @@ document.addEventListener('DOMContentLoaded', function () {
       // ignore
     }
 
-    var sphereEl = document.getElementById('flat-video-sphere');
     if (sphereEl) {
       sphereEl.setAttribute('src', '#flatVideoTexture');
     }
@@ -189,7 +322,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var hasStartedPlayback = false;
 
   var posterFallbackByVideo = {
-    'paddock_square.mp4': ''
+    'paddock_180.mp4': ''
   };
 
   if (posterEl) {
@@ -201,7 +334,6 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   if (sphereElForPoster && posterImgEl) {
-    sphereElForPoster.setAttribute('src', '#flatVideoPosterTexture');
     // Keep CSS poster visible (neutral black) until the A-Frame poster texture has actually loaded.
     if (posterEl) {
       var hideOverlayIfReady = function () {
@@ -285,9 +417,100 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   };
 
-  renderPosterFrame(selectedVid);
+  // Freeze-frame preview uses the video texture directly, so we don't need to capture a frame
+  // and we must not override the videosphere src with the poster texture.
+  // renderPosterFrame(selectedVid);
 
   var userInitiatedPlay = false;
+
+  var pseudoSpatialAudio = {
+    ctx: null,
+    source: null,
+    panner: null,
+    rafId: 0,
+    enabled: false
+  };
+
+  var getYawRad = function () {
+    var cam = document.getElementById('flat-video-camera');
+    if (!cam) return 0;
+    var lc = cam.components && cam.components['look-controls'];
+    if (lc && lc.yawObject) return lc.yawObject.rotation.y || 0;
+    if (cam.object3D) return cam.object3D.rotation.y || 0;
+    return 0;
+  };
+
+  var stopPseudoSpatialAudio = function () {
+    if (pseudoSpatialAudio.rafId) {
+      try {
+        cancelAnimationFrame(pseudoSpatialAudio.rafId);
+      } catch (e) {
+        // ignore
+      }
+      pseudoSpatialAudio.rafId = 0;
+    }
+  };
+
+  var startPseudoSpatialAudio = function () {
+    if (!pseudoSpatialAudio.enabled || !pseudoSpatialAudio.panner) return;
+    if (pseudoSpatialAudio.rafId) return;
+
+    var tick = function () {
+      pseudoSpatialAudio.rafId = 0;
+
+      if (!videoEl || videoEl.paused) {
+        stopPseudoSpatialAudio();
+        return;
+      }
+
+      var yawRad = getYawRad();
+      var yawNorm = yawRad;
+      while (yawNorm > Math.PI) yawNorm -= Math.PI * 2;
+      while (yawNorm < -Math.PI) yawNorm += Math.PI * 2;
+      var pan = Math.max(-1, Math.min(1, yawNorm / (Math.PI / 2)));
+      pan = Math.max(-0.65, Math.min(0.65, pan));
+      try {
+        pseudoSpatialAudio.panner.pan.setTargetAtTime(pan, pseudoSpatialAudio.ctx.currentTime, 0.05);
+      } catch (e) {
+        // ignore
+      }
+
+      pseudoSpatialAudio.rafId = requestAnimationFrame(tick);
+    };
+
+    pseudoSpatialAudio.rafId = requestAnimationFrame(tick);
+  };
+
+  var ensurePseudoSpatialAudio = function () {
+    if (!videoEl) return;
+    if (pseudoSpatialAudio.enabled) {
+      if (pseudoSpatialAudio.ctx && pseudoSpatialAudio.ctx.state === 'suspended') {
+        try {
+          pseudoSpatialAudio.ctx.resume();
+        } catch (e) {
+          // ignore
+        }
+      }
+      return;
+    }
+
+    var AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) return;
+
+    try {
+      pseudoSpatialAudio.ctx = new AudioContextCtor();
+      pseudoSpatialAudio.source = pseudoSpatialAudio.ctx.createMediaElementSource(videoEl);
+      pseudoSpatialAudio.panner = pseudoSpatialAudio.ctx.createStereoPanner();
+      pseudoSpatialAudio.source.connect(pseudoSpatialAudio.panner);
+      pseudoSpatialAudio.panner.connect(pseudoSpatialAudio.ctx.destination);
+      pseudoSpatialAudio.enabled = true;
+    } catch (e) {
+      pseudoSpatialAudio.ctx = null;
+      pseudoSpatialAudio.source = null;
+      pseudoSpatialAudio.panner = null;
+      pseudoSpatialAudio.enabled = false;
+    }
+  };
 
   var cameraEl = document.getElementById('flat-video-camera');
   if (cameraEl) {
@@ -348,8 +571,10 @@ document.addEventListener('DOMContentLoaded', function () {
     playBtn.addEventListener('click', function () {
       userInitiatedPlay = true;
       ensureVideoSourceSet();
+      ensurePseudoSpatialAudio();
       videoEl.play().then(function () {
         hasStartedPlayback = true;
+        startPseudoSpatialAudio();
         setPlayUi();
       }).catch(function () {
         setPlayUi();
@@ -358,11 +583,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     videoEl.addEventListener('play', function () {
       setPlayUi();
+      startPseudoSpatialAudio();
     });
     videoEl.addEventListener('pause', function () {
+      stopPseudoSpatialAudio();
       setPlayUi();
     });
     videoEl.addEventListener('ended', function () {
+      stopPseudoSpatialAudio();
       setPlayUi();
     });
   }
@@ -372,8 +600,10 @@ document.addEventListener('DOMContentLoaded', function () {
       if (videoEl.paused) {
         userInitiatedPlay = true;
         ensureVideoSourceSet();
+        ensurePseudoSpatialAudio();
         videoEl.play().then(function () {
           hasStartedPlayback = true;
+          startPseudoSpatialAudio();
           setPlayUi();
         }).catch(function () {
           setPlayUi();
@@ -388,6 +618,7 @@ document.addEventListener('DOMContentLoaded', function () {
   if (stopBtn && videoEl) {
     stopBtn.addEventListener('click', function () {
       videoEl.pause();
+      stopPseudoSpatialAudio();
       try {
         videoEl.currentTime = 0;
       } catch (e) {
