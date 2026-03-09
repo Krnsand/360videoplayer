@@ -51,7 +51,8 @@
       if (videoSelect && videoBtn) {
         videoBtn.addEventListener('click', function () {
           var vid = videoSelect.value;
-          window.location.href = 'video.html?vid=' + encodeURIComponent(vid);
+					console.log(vid)
+          window.location.href = 'video?vid=' + encodeURIComponent(vid);
         });
       }
 
@@ -60,7 +61,7 @@
       if (squareVideoSelect && squareVideoBtn) {
         squareVideoBtn.addEventListener('click', function () {
           var vid = squareVideoSelect.value;
-          window.location.href = 'video-flat.html?vid=' + encodeURIComponent(vid);
+          window.location.href = 'video-flat?vid=' + encodeURIComponent(vid);
         });
       }
 
@@ -70,7 +71,7 @@
 
       btn.addEventListener('click', function () {
         var img = select.value;
-        window.location.href = 'image.html?img=' + encodeURIComponent(img);
+        window.location.href = 'image?img=' + encodeURIComponent(img);
       });
     })();
   </script>

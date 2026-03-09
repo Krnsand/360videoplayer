@@ -35,6 +35,10 @@ document.addEventListener('DOMContentLoaded', function () {
     ? requestedVid
     : 'videos/studio.mp4';
 
+  if (!requestedVid || !allowedVideos[requestedVid]) {
+    console.log('video.html fallback vid:', requestedVid);
+  }
+
   var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   /* ------------------------------
@@ -63,6 +67,7 @@ document.addEventListener('DOMContentLoaded', function () {
   videoEl.setAttribute('playsinline', '');
 
   videoEl.src = selectedVid;
+  videoEl.load();
 
   sphereEl.setAttribute('src', '#videoTexture');
   sphereEl.setAttribute('material', 'opacity', 0);
