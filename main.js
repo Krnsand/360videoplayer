@@ -25,15 +25,15 @@ document.addEventListener('DOMContentLoaded', function () {
   ------------------------------ */
 
   var allowedVideos = {
-    'studio.mp4': true,
-    'paddock_360.mp4': true
+    'videos/studio.mp4': true,
+    'videos/paddock.mp4': true
   };
 
   var params = new URLSearchParams(window.location.search);
   var requestedVid = params.get('vid');
   var selectedVid = (requestedVid && allowedVideos[requestedVid])
     ? requestedVid
-    : 'studio.mp4';
+    : 'videos/studio.mp4';
 
   var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 

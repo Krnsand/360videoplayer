@@ -1,0 +1,12 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install --global serve
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["serve", ".", "-l", "3000"]

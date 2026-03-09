@@ -220,12 +220,12 @@ if (window.AFRAME && !AFRAME.components['pitch-clamp']) {
 
 document.addEventListener('DOMContentLoaded', function () {
   var allowedVideos = {
-    'paddock_180.mp4': true
+    'videos/paddock_square.mp4': true
   };
 
   var params = new URLSearchParams(window.location.search);
   var requestedVid = params.get('vid');
-  var selectedVid = (requestedVid && allowedVideos[requestedVid]) ? requestedVid : 'paddock_180.mp4';
+  var selectedVid = (requestedVid && allowedVideos[requestedVid]) ? requestedVid : 'videos/paddock_square.mp4';
 
   var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
@@ -322,7 +322,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var hasStartedPlayback = false;
 
   var posterFallbackByVideo = {
-    'paddock_180.mp4': ''
+    'videos/paddock_square.mp4': ''
   };
 
   if (posterEl) {

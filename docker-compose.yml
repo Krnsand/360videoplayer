@@ -1,0 +1,18 @@
+services:
+  app:
+    restart: unless-stopped
+    build:
+      context: .
+    container_name: cu360
+    environment:
+      - VIRTUAL_HOST=cu360.kokokaka.net
+      - VIRTUAL_PORT=3000
+    volumes:
+      - ./videos:/app/videos
+    networks:
+      - nginx-proxy
+
+networks:
+  nginx-proxy:
+    external: true
+    name: nginx-proxy
