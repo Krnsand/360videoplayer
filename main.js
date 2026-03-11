@@ -26,7 +26,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   var allowedVideos = {
     'videos/studio.mp4': true,
-    'videos/paddock.mp4': true
+    'videos/paddock.mp4': true,
+    'videos/mounted_games_1.mp4': true
   };
 
   var params = new URLSearchParams(window.location.search);
